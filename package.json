@@ -1,0 +1,38 @@
+{
+  "name": "hyper-media-control-upnp",
+  "version": "1.0.0",
+  "description": "Extends hyper-media-control with support for UPNP devices that expose the AVTransport:1 interface.",
+  "main": "dist/index.js",
+  "scripts": {
+    "lint": "standard ./src/**.js | snazzy",
+    "prebuild": "npm run lint && rimraf ./dist",
+    "build": "babel src -d dist",
+    "prepublishonly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OrionNebula/hyper-media-control-upnp"
+  },
+  "keywords": [
+    "music",
+    "dlna",
+    "hyper-media-control",
+    "hyper",
+    "hyperterm"
+  ],
+  "author": "Olivia Trewin",
+  "license": "MIT",
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.7.0",
+    "rimraf": "^2.6.2",
+    "snazzy": "^7.1.1",
+    "standard": "^11.0.1"
+  },
+  "dependencies": {
+    "hyper-plugin-extend": "1.0.0",
+    "node-ssdp": "^3.3.0",
+    "upnp-device-client": "^1.0.2",
+    "xml2js": "^0.4.19"
+  }
+}

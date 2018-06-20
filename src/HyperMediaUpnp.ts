@@ -1,18 +1,36 @@
+// import './node-ssdp'
+import { Client, SsdpHeaders } from 'node-ssdp'
 import { EventEmitter } from 'events'
-import { Client } from 'node-ssdp'
-import DeviceClient from 'upnp-device-client'
+import * as DeviceClient from 'upnp-device-client'
 import { parseString } from 'xml2js'
+import { PlayerManager, HyperMediaConfig, Status, State, MediaPlugin } from 'hyper-media-control'
 
-export class HyperMediaUpnp extends EventEmitter {
-  constructor (playerManager, config) {
+interface HyperMediaUpnpConfig {
+
+}
+
+interface Players {
+  [key: string]: DeviceClient
+}
+
+export class HyperMediaUpnp extends EventEmitter implements MediaPlugin {
+  playerManager: PlayerManager
+  private lastStatus: Status
+  private playerIndex: number
+  private activePlayer: DeviceClient
+  private searchHandle: NodeJS.Timer
+  private eventPumpHandle: NodeJS.Timer
+  private players: Players
+  private readonly client: Client
+  private readonly config: HyperMediaUpnpConfig
+  constructor (playerManager: PlayerManager, config: HyperMediaConfig) {
     super()
-    this.config = Object.assign({
-
-    }, config.upnp || {})
+    this.playerManager = playerManager
+    this.config = { ...config['upnp'] }
     this.players = {}
     this.playerIndex = 0
     this.client = new Client()
-    this.lastStatus = { isRunning: false }
+    this.lastStatus = { isRunning: false, state: State.Stopped }
   }
 
   playerName () {
@@ -31,7 +49,7 @@ export class HyperMediaUpnp extends EventEmitter {
 
   playPause () {
     if (this.lastStatus.state === 'paused') {
-      return new Promise((resolve, reject) => {
+      return new Promise<Status>((resolve, reject) => {
         this.activePlayer.callAction('AVTransport', 'Play', { InstanceID: 0, Speed: 1 }, (err, result) => {
           if (err) {
             resolve(this.lastStatus = this.playerDropOut())
@@ -53,7 +71,7 @@ export class HyperMediaUpnp extends EventEmitter {
         })
       })
     } else {
-      return new Promise((resolve, reject) => {
+      return new Promise<Status>((resolve, reject) => {
         this.activePlayer.callAction('AVTransport', 'Pause', { InstanceID: 0, Speed: 1 }, (err, result) => {
           if (err) {
             resolve(this.lastStatus = this.playerDropOut())
@@ -78,7 +96,7 @@ export class HyperMediaUpnp extends EventEmitter {
   }
 
   nextTrack () {
-    return new Promise((resolve, reject) => {
+    return new Promise<Status>((resolve, reject) => {
       this.activePlayer.callAction('AVTransport', 'Next', { InstanceID: 0, Speed: 1 }, (err, result) => {
         if (err) {
           resolve(this.lastStatus = this.playerDropOut())
@@ -101,7 +119,7 @@ export class HyperMediaUpnp extends EventEmitter {
   }
 
   previousTrack () {
-    return new Promise((resolve, reject) => {
+    return new Promise<Status>((resolve, reject) => {
       this.activePlayer.callAction('AVTransport', 'Previous', { InstanceID: 0, Speed: 1 }, (err, result) => {
         if (err) {
           resolve(this.lastStatus = this.playerDropOut())
@@ -129,7 +147,7 @@ export class HyperMediaUpnp extends EventEmitter {
       if (headers.ST === 'urn:schemas-upnp-org:service:AVTransport:1' && this.players[headers.LOCATION] === undefined) {
         // We've found an AV renderer
         console.log(`Located a renderer: ${headers.LOCATION}`)
-        var av = new DeviceClient(headers.LOCATION)
+        let av = new DeviceClient(headers.LOCATION)
         this.players[headers.LOCATION] = av
         if (Object.keys(this.players).length === 1) this.setActivePlayer(av)
       }
@@ -181,25 +199,11 @@ export class HyperMediaUpnp extends EventEmitter {
     this.players = {}
     clearInterval(this.eventPumpHandle)
     clearInterval(this.searchHandle)
-    this.lastStatus = { isRunning: false }
+    this.lastStatus = { isRunning: false, state: State.Stopped }
     this.activePlayer = null
   }
 
-  setActivePlayer (player) {
-    if (this.activePlayer === player) return
-
-    this.activePlayer = player
-  }
-
-  playerDropOut () {
-    if (this.activePlayer) {
-      delete this.players[this.activePlayer.url]
-      this.activePlayer = this.players[Object.keys(this.players)[0]]
-    }
-    return { isRunning: false }
-  }
-
-  composeStatus (status) {
+  private composeStatus (status: any): Promise<Status> {
     return new Promise((resolve, reject) => {
       status.TrackMetaData && parseString(status.TrackMetaData, (err, track) => {
         if (err) {
@@ -224,5 +228,19 @@ export class HyperMediaUpnp extends EventEmitter {
         }))
       })
     })
+  }
+
+  private playerDropOut (): Status {
+    if (this.activePlayer) {
+      delete this.players[this.activePlayer.url]
+      this.activePlayer = this.players[Object.keys(this.players)[0]]
+    }
+    return { isRunning: false, state: State.Stopped }
+  }
+
+  private setActivePlayer (player: DeviceClient) {
+    if (this.activePlayer === player) return
+
+    this.activePlayer = player
   }
 }
